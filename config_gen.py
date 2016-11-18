@@ -36,11 +36,12 @@ def main():
     parser = argparse.ArgumentParser(description="Automatically generates config files for YouCompleteMe")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show output from build process")
     parser.add_argument("-f", "--force", action="store_true", help="Overwrite the file if it exists.")
+    parser.add_argument("-a", "--absolute", action="store_true", help="Replace the relative path with the absolute path")
     parser.add_argument("-m", "--make", default="make", help="Use the specified executable for make.")
     parser.add_argument("-b", "--build-system", choices=["cmake", "autotools", "qmake", "make"], help="Force use of the specified build system rather than trying to autodetect.")
     parser.add_argument("-c", "--compiler", help="Use the specified executable for clang. It should be the same version as the libclang used by YCM. The executable for clang++ will be inferred from this.")
     parser.add_argument("-C", "--configure_opts", default="", help="Additional flags to pass to configure/cmake/etc. e.g. --configure_opts=\"--enable-FEATURE\"")
-    parser.add_argument("-F", "--format", choices=["ycm", "cc"], default="ycm", help="Format of output file (YouCompleteMe or color_coded). Default: ycm")
+    parser.add_argument("-F", "--format", choices=["ycm", "cc", "syn"], default="ycm", help="Format of output file (YouCompleteMe ,color_coded or syntastic-extras). Default: ycm")
     parser.add_argument("-M", "--make-flags", help="Flags to pass to make when fake-building. Default: -M=\"{}\"".format(" ".join(default_make_flags)))
     parser.add_argument("-o", "--output", help="Save the config file as OUTPUT. Default: .ycm_extra_conf.py, or .color_coded if --format=cc.")
     parser.add_argument("-x", "--language", choices=["c", "c++"], help="Only output flags for the given language. This defaults to whichever language has its compiler invoked the most.")
@@ -81,14 +82,16 @@ def main():
         None:  args["output"],
         "cc":  os.path.join(project_dir, ".color_coded"),
         "ycm": os.path.join(project_dir, ".ycm_extra_conf.py"),
+        "syn": os.path.join(project_dir, ".syntastic_*_config"),
     }[args["format"] if args["output"] is None else None]
 
-    if(os.path.exists(config_file) and not args["force"]):
-        print("'{}' already exists. Overwrite? [y/N] ".format(config_file)),
-        response = sys.stdin.readline().strip().lower()
+    for _config_file in glob.glob(config_file):
+        if(os.path.exists(_config_file) and not args["force"]):
+            print("'{}' already exists. Overwrite? [y/N] ".format(config_file)),
+            response = sys.stdin.readline().strip().lower()
 
-        if(response != "y" and response != "yes"):
-            return 1
+            if(response != "y" and response != "yes"):
+                return 1
 
     # command-line args to pass to fake_build() using kwargs
     args["make_cmd"] = args.pop("make")
@@ -96,6 +99,7 @@ def main():
     args["make_flags"] = default_make_flags if args["make_flags"] is None else shlex.split(args["make_flags"])
     force_lang = args.pop("language")
     output_format = args.pop("format")
+    with_abspath = args.pop("absolute")
     del args["compiler"]
     del args["force"]
     del args["output"]
@@ -104,15 +108,19 @@ def main():
     generate_conf = {
         "ycm": generate_ycm_conf,
         "cc":  generate_cc_conf,
+        "syn": generate_syn_conf,
     }[output_format]
+
+    if output_format == 'syn':
+        with_abspath = True
 
     # temporary files to hold build logs
     with tempfile.NamedTemporaryFile(mode="r+") as c_build_log:
         with tempfile.NamedTemporaryFile(mode="r+") as cxx_build_log:
             # perform the actual compilation of flags
             fake_build(project_dir, c_build_log.name, cxx_build_log.name, **args)
-            (c_count, c_skip, c_flags) = parse_flags(c_build_log)
-            (cxx_count, cxx_skip, cxx_flags) = parse_flags(cxx_build_log)
+            (c_count, c_skip, c_flags) = parse_flags(c_build_log, with_abspath)
+            (cxx_count, cxx_skip, cxx_flags) = parse_flags(cxx_build_log, with_abspath)
 
             print("Collected {} relevant entries for C compilation ({} discarded).".format(c_count, c_skip))
             print("Collected {} relevant entries for C++ compilation ({} discarded).".format(cxx_count, cxx_skip))
@@ -373,7 +381,7 @@ def patch_qmake_makefile(makefile_path):
         f.write(makefile_output)
 
 
-def parse_flags(build_log):
+def parse_flags(build_log, with_abspath):
     '''Creates a list of compiler flags from the build log.
 
     build_log: an iterator of lines
@@ -383,7 +391,7 @@ def parse_flags(build_log):
 
     # Used to ignore entries which result in temporary files, or don't fully
     # compile the file
-    temp_output = re.compile("(-x assembler)|(-o ([a-zA-Z0-9._].tmp))|(/dev/null)")
+    temp_output = re.compile("(-x assembler)|(-o ([a-zA-Z0-9._].tmp))|(/dev/null)|(cur_path=.*)")
     skip_count = 0
 
     # Flags we want:
@@ -395,6 +403,7 @@ def parse_flags(build_log):
     flags_whitelist = ["-[iIDF].*", "-W[^,]*", "-std=[a-z0-9+]+", "-(no)?std(lib|inc)", "-m[0-9]+"]
     flags_whitelist = re.compile("|".join(map("^{}$".format, flags_whitelist)))
     flags = set()
+    cur_path = ''
     line_count = 0
 
     # macro definitions should be handled separately, so we can resolve duplicates
@@ -407,6 +416,9 @@ def parse_flags(build_log):
     # Process build log
     for line in build_log:
         if(temp_output.search(line)):
+            #Read the variable cur_path from the build_log
+            if 'cur_path=' in line:
+                cur_path = line.split('=', 1)[1].replace('\n', '') + '/'
             skip_count += 1
             continue
 
@@ -429,8 +441,12 @@ def parse_flags(build_log):
 
             # include arguments for this option, if there are any, as a tuple
             if(i != len(words) - 1 and word in filename_flags and words[i + 1][0] != '-'):
+                if with_abspath:
+                    words[i + 1] = rta_path(words[i + 1], cur_path)
                 flags.add((word, words[i + 1]))
             else:
+                if with_abspath and '-I' in word:
+                    word = '-I' + rta_path(word.replace('-I', ''), cur_path)
                 flags.add(word)
 
     # Only specify one word size (the largest)
@@ -454,6 +470,20 @@ def parse_flags(build_log):
 
     return (line_count, skip_count, sorted(flags, key=lambda x:x[0] if isinstance(x, tuple) else x))
 
+def rta_path(dummy_path, cur_path):
+    ''' Traslate the relative path to the absolute path
+
+    dummy_path: the path contains '../' or './'
+    cur_path: the path of compiled file which is read from build_log'''
+
+    if dummy_path[0] == '.':
+        #For cases like "../../"
+        abs_path = os.path.realpath(cur_path + dummy_path)
+    else:
+        #For cases like "/home/user/project/src/../"
+        abs_path = os.path.realpath(dummy_path)
+
+    return abs_path
 
 def generate_cc_conf(flags, config_file):
     '''Generates the .color_coded file
@@ -468,6 +498,26 @@ def generate_cc_conf(flags, config_file):
             else: # is tuple
                 for f in flag:
                     output.write(f + "\n")
+
+def generate_syn_conf(flags, config_file):
+    '''Generates the .syntastic_<type>_config file
+
+    flags: the list of flags
+    config_file: the path to save the configuration file at'''
+
+    if flags[1] == 'c':
+        config_file = config_file.replace('*', 'c')
+    else:
+        config_file = config_file.replace('*', 'cpp')
+
+    with open(config_file, "w") as output:
+        #We need to escape the quotes
+        for flag in flags:
+            if(isString(flag)):
+                output.write(flag.replace('"', r'\"') + "\n")
+            else:
+                for f in flag:
+                    output.write(f.replace('"', r'\"') + "\n")
 
 def generate_ycm_conf(flags, config_file):
     '''Generates the .ycm_extra_conf.py.

@@ -3,6 +3,7 @@ This is a script which generates a list of compiler flags from a project with an
 
 * generate a ```.ycm_extra_conf.py``` file for use with [YouCompleteMe](https://github.com/Valloric/YouCompleteMe)
 * generate a ```.color_coded``` file for use with [color_coded](https://github.com/jeaye/color_coded)
+* generate a ```.syntastic_<type>_config``` file for use with [syntastic-extras](https://github.com/myint/syntastic-extras)
 
 It works by building the project with a fake toolchain, which simply and filters compiler flags to be stored in the resulting file.
 
