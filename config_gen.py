@@ -87,7 +87,7 @@ def main():
 
     for _config_file in glob.glob(config_file):
         if(os.path.exists(_config_file) and not args["force"]):
-            print("'{}' already exists. Overwrite? [y/N] ".format(config_file)),
+            print("'{}' already exists. Overwrite? [y/N] ".format(_config_file)),
             response = sys.stdin.readline().strip().lower()
 
             if(response != "y" and response != "yes"):
