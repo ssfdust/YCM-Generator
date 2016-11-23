@@ -10,7 +10,7 @@ elif [ "$1" = "-v" ] || [ "$1" = "--version" ]; then
 
 else
     path=`pwd`
-    echo "$path" >> $YCM_CONFIG_GEN_CXX_LOG
+    echo "cur_path=$path" >> $YCM_CONFIG_GEN_CXX_LOG
     echo "$@" >> $YCM_CONFIG_GEN_CXX_LOG
 fi
 
