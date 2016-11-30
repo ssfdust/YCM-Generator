@@ -27,6 +27,7 @@
 # OTHER DEALINGS IN THE SOFTWARE.
 #
 # For more information, please refer to <http://unlicense.org/>
+# -*- coding: utf-8 -*-
 
 import os
 import ycm_core
@@ -40,12 +41,12 @@ flags = [
 
 
 def LoadSystemIncludes():
-    regex = re.compile(ur'(?:\#include \<...\> search starts here\:)(?P<list>.*?)(?:End of search list)', re.DOTALL);
+    regex = re.compile(r'(?:\#include \<...\> search starts here\:)(?P<list>.*?)(?:End of search list)', re.DOTALL);
     process = subprocess.Popen(['clang', '-v', '-E', '-x', 'c++', '-'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE);
     process_out, process_err = process.communicate('');
     output = process_out + process_err;
     includes = [];
-    for p in re.search(regex, output).group('list').split('\n'):
+    for p in re.search(regex, str(output)).group('list').split('\n'):
         p = p.strip();
         if len(p) > 0 and p.find('(framework directory)') < 0:
             includes.append('-isystem');

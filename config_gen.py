@@ -233,7 +233,7 @@ def fake_build(project_dir, c_build_log_path, cxx_build_log_path, verbose, make_
         build_dir = tempfile.mkdtemp()
         proc_opts["cwd"] = build_dir
 
-        # if the project was built Generatorin-tree, we need to hide the cache file so that cmake
+        # if the project was built in-tree, we need to hide the cache file so that cmake
         # populates the build dir instead of just re-generating the existing files
         cache_path = os.path.join(project_dir, "CMakeCache.txt")
 
@@ -473,7 +473,7 @@ def parse_flags(build_log, with_abspath):
     return (line_count, skip_count, sorted(flags, key=lambda x:x[0] if isinstance(x, tuple) else x))
 
 def rta_path(dummy_path, cur_path):
-    ''' Traslate the relative path to the absolute path
+    ''' Translate the relative path to the absolute path
 
     dummy_path: the path contains '../' or './'
     cur_path: the path of compiled file which is read from build_log'''
