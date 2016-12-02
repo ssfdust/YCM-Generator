@@ -9,8 +9,7 @@ elif [ "$1" = "-v" ] || [ "$1" = "--version" ]; then
     $YCM_CONFIG_GEN_CC_PASSTHROUGH $@
 
 else
-    path=`pwd`
-    echo "cur_path=$path" >> $YCM_CONFIG_GEN_CC_LOG
+    echo "cur_path=$(pwd)" >> $YCM_CONFIG_GEN_CC_LOG
     echo "$@" >> $YCM_CONFIG_GEN_CC_LOG
 fi
 
